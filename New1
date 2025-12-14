@@ -1,0 +1,112 @@
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import os
+
+# --- КОНФИГУРАЦИЯ (Замените своими данными) ---
+SMTP_SERVER = 'smtp.gmail.com'  # Адрес сервера SMTP
+SMTP_PORT = 587                 # Порт (обычно 587 для TLS/STARTTLS)
+EMAIL_FROM = 'ваш_адрес@gmail.com'     # Адрес, с которого отправляется письмо
+EMAIL_PASSWORD = 'ваш_пароль_приложения' # Сгенерированный пароль приложения
+EMAIL_TO = 'получатель@example.com'    # Адрес получателя
+# ---------------------------------------------
+
+def send_email(subject, body, to_email, attachment_path=None):
+    """
+    Отправляет электронное письмо с возможностью прикрепления файла.
+    """
+    try:
+        # 1. Создание контейнера для письма
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_FROM
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        
+        # 2. Прикрепление тела письма (Plain Text)
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # 3. Прикрепление файла, если указан
+        if attachment_path:
+            if not os.path.exists(attachment_path):
+                print(f"⚠️ Вложение не найдено: {attachment_path}")
+            else:
+                attach_file(msg, attachment_path)
+
+        # 4. Подключение к SMTP-серверу
+        # context = ssl.create_default_context() # Для более безопасного соединения
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            
+            # Начинаем шифрование (обязательно для Gmail)
+            server.starttls()
+            
+            # Аутентификация
+            server.login(EMAIL_FROM, EMAIL_PASSWORD)
+            
+            # Отправка письма
+            text = msg.as_string()
+            server.sendmail(EMAIL_FROM, to_email, text)
+            
+            print(f"✅ Письмо успешно отправлено на {to_email}")
+            return True
+
+    except smtplib.SMTPAuthenticationError:
+        print("❌ Ошибка аутентификации SMTP. Проверьте логин, пароль приложения и настройки безопасности.")
+    except Exception as e:
+        print(f"❌ Произошла ошибка при отправке почты: {e}")
+    
+    return False
+
+def attach_file(msg, filename):
+    """Добавляет файл к объекту MIME-сообщения."""
+    try:
+        with open(filename, "rb") as attachment:
+            # Создаем MIMEBase для двоичных данных
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(attachment.read())
+
+        # Кодируем вложение в Base64
+        encoders.encode_base64(part)
+
+        # Добавляем заголовок для вложения
+        part.add_header(
+            "Content-Disposition",
+            f"attachment; filename= {os.path.basename(filename)}",
+        )
+
+        # Прикрепляем часть к сообщению
+        msg.attach(part)
+        print(f"Файл '{os.path.basename(filename)}' прикреплен.")
+
+    except Exception as e:
+        print(f"Ошибка при прикреплении файла: {e}")
+
+# --- Использование ---
+if __name__ == "__main__":
+    
+    # Создадим фиктивный файл для примера вложения
+    dummy_file = "test_report.txt"
+    with open(dummy_file, "w") as f:
+        f.write("Это тестовый отчет, автоматически сгенерированный скриптом.")
+        
+    subject = "Автоматический отчет о продажах"
+    body = """
+    Здравствуйте,
+    
+    Во вложении вы найдете ежедневный отчет.
+    
+    С уважением,
+    Система уведомлений.
+    """
+    
+    send_email(
+        subject=subject,
+        body=body,
+        to_email=EMAIL_TO,
+        attachment_path=dummy_file  # Можно оставить None, если вложение не нужно
+    )
+
+    # Удаляем фиктивный файл
+    if os.path.exists(dummy_file):
+        os.remove(dummy_file)
